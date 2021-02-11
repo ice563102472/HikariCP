@@ -10,29 +10,30 @@
       <artifact.classifier />
 
       <docker.maven.plugin.fabric8.version>0.33.0</docker.maven.plugin.fabric8.version>
-      <felix.bundle.plugin.version>4.2.1</felix.bundle.plugin.version>
+      <felix.bundle.plugin.version>5.1.1</felix.bundle.plugin.version>
       <felix.version>6.0.1</felix.version>
-      <hibernate.version>5.2.10.Final</hibernate.version>
-      <javassist.version>3.24.1-GA</javassist.version>
+      <hibernate.version>5.4.16.Final</hibernate.version>
+      <javassist.version>3.27.0-GA</javassist.version>
       <jndi.version>0.11.4.1</jndi.version>
       <maven.release.version>2.5.3</maven.release.version>
-      <metrics.version>3.2.4</metrics.version>
-      <micrometer.version>1.3.2</micrometer.version>
-      <simpleclient.version>0.0.26</simpleclient.version>
+      <metrics.version>3.2.5</metrics.version>
+      <micrometer.version>1.5.10</micrometer.version>
+      <simpleclient.version>0.9.0</simpleclient.version>
       <mockito.version>3.2.4</mockito.version>
       <pax.exam.version>4.13.1</pax.exam.version>
       <pax.url.version>2.5.4</pax.url.version>
       <postgresql.version>42.1.4</postgresql.version>
-      <slf4j.version>1.7.25</slf4j.version>
-      <log4j.version>2.11.1</log4j.version>
+      <log4j.version>2.14.0</log4j.version>
+      <slf4j.version>1.7.30</slf4j.version>
       <commons.csv.version>1.5</commons.csv.version>
       <h2.version>1.4.196</h2.version>
-      <junit.version>4.12</junit.version>
+      <junit.version>4.13.1</junit.version>
+      <testcontainers.version>1.15.1</testcontainers.version>
    </properties>
 
    <groupId>com.zaxxer</groupId>
    <artifactId>HikariCP</artifactId>
-   <version>3.4.6-SNAPSHOT</version>
+   <version>4.0.2-SNAPSHOT</version>
    <packaging>bundle</packaging>
 
    <name>HikariCP</name>
@@ -80,12 +81,6 @@
       </dependency>
       <dependency>
          <groupId>org.apache.logging.log4j</groupId>
-         <artifactId>log4j-slf4j-impl</artifactId>
-         <version>${log4j.version}</version>
-         <scope>test</scope>
-      </dependency>
-      <dependency>
-         <groupId>org.apache.logging.log4j</groupId>
          <artifactId>log4j-api</artifactId>
          <version>${log4j.version}</version>
          <scope>test</scope>
@@ -94,6 +89,12 @@
          <groupId>org.apache.logging.log4j</groupId>
          <artifactId>log4j-core</artifactId>
          <version>${log4j.version}</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>postgresql</artifactId>
+         <version>${testcontainers.version}</version>
          <scope>test</scope>
       </dependency>
       <dependency>
@@ -325,7 +326,7 @@
                <executable>java</executable>
                <arguments>
                   <argument>-cp</argument>
-                  <argument>${project.build.outputDirectory}:${maven.compile.classpath}</argument>
+                  <argument>${project.build.outputDirectory}${path.separator}${maven.compile.classpath}</argument>
                   <argument>com.zaxxer.hikari.util.JavassistProxyFactory</argument>
                </arguments>
             </configuration>
@@ -521,8 +522,6 @@
                <configuration>
                   <!-- Sets the VM argument line used when unit tests are run. -->
                   <argLine>${surefireArgLine} ${sureFireOptions11}</argLine>
-                  <!-- Skips unit tests if the value of skip.unit.tests property is true -->
-                  <skipTests>${skip.unit.tests}</skipTests>
                   <reuseForks>${sureFireForks11}</reuseForks>
                </configuration>
             </plugin>
@@ -580,7 +579,16 @@
          </activation>
          <properties>
             <automatic.module.name>com.zaxxer.hikari</automatic.module.name>
+            <slf4j.version>1.7.30</slf4j.version>
          </properties>
+         <dependencies>
+            <dependency>
+               <groupId>org.apache.logging.log4j</groupId>
+               <artifactId>log4j-slf4j-impl</artifactId>
+               <version>${log4j.version}</version>
+               <scope>test</scope>
+            </dependency>
+         </dependencies>
       </profile>
       <profile>
          <id>Java11</id>
@@ -594,59 +602,35 @@
                -add-exports java.base/sun.net.www.protocol.http=ALL-UNNAMED
                -add-exports java.base/sun.net.www.protocol.https=ALL-UNNAMED
             </sureFireOptions11 -->
+            <slf4j.version>2.0.0-alpha1</slf4j.version>
             <sureFireForks11>true</sureFireForks11>
          </properties>
-
+         <dependencies>
+            <dependency>
+               <groupId>org.apache.logging.log4j</groupId>
+               <artifactId>log4j-slf4j18-impl</artifactId>
+               <version>${log4j.version}</version>
+               <scope>test</scope>
+            </dependency>
+         </dependencies>
          <build>
             <plugins>
                <plugin>
                   <groupId>org.apache.maven.plugins</groupId>
-                  <artifactId>maven-antrun-plugin</artifactId>
-                  <version>3.0.0</version>
+                  <artifactId>maven-compiler-plugin</artifactId>
+                  <version>3.8.1</version>
                   <executions>
                      <execution>
                         <id>compile-java11</id>
-                        <phase>compile</phase>
                         <goals>
-                           <goal>run</goal>
+                           <goal>compile</goal>
                         </goals>
                         <configuration>
-                           <target>
-                              <mkdir dir="${java11.build.outputDirectory}" />
-                              <copy todir="${java11.build.outputDirectory}">
-                                 <fileset dir="${project.build.outputDirectory}" />
-                              </copy>
-                              <property name="classpath" value="${org.hdrhistogram:HdrHistogram:jar}: ${org.latencyutils:LatencyUtils:jar}:${org.hibernate.javax.persistence:hibernate-jpa:jar}: ${org.hibernate.common:hibernate-commons-annotations:jar}:${antlr:antlr:jar}: ${org.jboss:jandex:jar}:${com.fasterxml:classmate:jar}:${dom4j:dom4j:jar}" />
-                              "
-                              <property name="modulepath" value="${org.slf4j:slf4j-api:jar}: ${org.javassist:javassist:jar}:${io.micrometer:micrometer-core:jar}: ${org.hibernate:hibernate-core:jar}:${io.dropwizard.metrics:metrics-core:jar}: ${io.dropwizard.metrics:metrics-healthchecks:jar}:${io.prometheus:simpleclient:jar}" />
-                              <javac srcdir="${java11.sourceDirectory}" destdir="${java11.build.outputDirectory}" classpath="${classpath}" modulepath="${modulepath}" includeantruntime="false" />
-                           </target>
-                        </configuration>
-                     </execution>
-                  </executions>
-               </plugin>
-
-               <plugin>
-                  <groupId>org.apache.maven.plugins</groupId>
-                  <artifactId>maven-resources-plugin</artifactId>
-                  <version>3.1.0</version>
-                  <executions>
-                     <execution>
-                        <id>copy-module-info</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                           <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                           <outputDirectory>${project.build.outputDirectory}/META-INF/versions/11</outputDirectory>
-                           <resources>
-                              <resource>
-                                 <directory>${java11.build.outputDirectory}</directory>
-                                 <includes>
-                                    <include>module-info.class</include>
-                                 </includes>
-                              </resource>
-                           </resources>
+                           <release>11</release>
+                           <compileSourceRoots>
+                              <compileSourceRoot>${project.basedir}/src/main/java11</compileSourceRoot>
+                           </compileSourceRoots>
+                           <multiReleaseOutput>true</multiReleaseOutput>
                         </configuration>
                      </execution>
                   </executions>

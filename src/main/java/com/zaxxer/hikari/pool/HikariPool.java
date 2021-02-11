@@ -138,16 +138,16 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
       this.houseKeeperTask = houseKeepingExecutorService.scheduleWithFixedDelay(new HouseKeeper(), 100L, housekeepingPeriodMs, MILLISECONDS);
 
       if (Boolean.getBoolean("com.zaxxer.hikari.blockUntilFilled") && config.getInitializationFailTimeout() > 1) {
-         addConnectionExecutor.setCorePoolSize(Math.min(16, Runtime.getRuntime().availableProcessors()));
          addConnectionExecutor.setMaximumPoolSize(Math.min(16, Runtime.getRuntime().availableProcessors()));
+         addConnectionExecutor.setCorePoolSize(Math.min(16, Runtime.getRuntime().availableProcessors()));
 
          final long startTime = currentTime();
          while (elapsedMillis(startTime) < config.getInitializationFailTimeout() && getTotalConnections() < config.getMinimumIdle()) {
             quietlySleep(MILLISECONDS.toMillis(100));
          }
 
-         addConnectionExecutor.setCorePoolSize(1);
          addConnectionExecutor.setMaximumPoolSize(1);
+         addConnectionExecutor.setCorePoolSize(1);
       }
    }
 
@@ -456,7 +456,6 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
       }
    }
 
-   @SuppressWarnings("unused")
    int[] getPoolStateCounts()
    {
       return connectionBag.getStateCounts();
@@ -481,13 +480,15 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
             // variance up to 2.5% of the maxlifetime
             final long variance = maxLifetime > 10_000 ? ThreadLocalRandom.current().nextLong( maxLifetime / 40 ) : 0;
             final long lifetime = maxLifetime - variance;
-            poolEntry.setFutureEol(houseKeepingExecutorService.schedule(
-               () -> {
-                  if (softEvictConnection(poolEntry, "(connection has passed maxLifetime)", false /* not owner */)) {
-                     addBagItem(connectionBag.getWaitingThreadCount());
-                  }
-               },
-               lifetime, MILLISECONDS));
+            poolEntry.setFutureEol(houseKeepingExecutorService.schedule(new MaxLifetimeTask(poolEntry), lifetime, MILLISECONDS));
+         }
+
+         final long keepaliveTime = config.getKeepaliveTime();
+         if (keepaliveTime > 0) {
+            // variance up to 10% of the heartbeat time
+            final long variance = ThreadLocalRandom.current().nextLong(keepaliveTime / 10);
+            final long heartbeatTime = keepaliveTime - variance;
+            poolEntry.setKeepalive(houseKeepingExecutorService.scheduleWithFixedDelay(new KeepaliveTask(poolEntry), heartbeatTime, heartbeatTime, MILLISECONDS));
          }
 
          return poolEntry;
@@ -810,6 +811,47 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
          }
          catch (Exception e) {
             logger.error("Unexpected exception in housekeeping task", e);
+         }
+      }
+   }
+
+   private final class MaxLifetimeTask implements Runnable
+   {
+      private final PoolEntry poolEntry;
+
+      MaxLifetimeTask(final PoolEntry poolEntry)
+      {
+         this.poolEntry = poolEntry;
+      }
+
+      public void run()
+      {
+         if (softEvictConnection(poolEntry, "(connection has passed maxLifetime)", false /* not owner */)) {
+            addBagItem(connectionBag.getWaitingThreadCount());
+         }
+      }
+   }
+
+   private final class KeepaliveTask implements Runnable
+   {
+      private final PoolEntry poolEntry;
+
+      KeepaliveTask(final PoolEntry poolEntry)
+      {
+         this.poolEntry = poolEntry;
+      }
+
+      public void run()
+      {
+         if (connectionBag.reserve(poolEntry)) {
+            if (!isConnectionAlive(poolEntry.connection)) {
+               softEvictConnection(poolEntry, DEAD_CONNECTION_MESSAGE, true);
+               addBagItem(connectionBag.getWaitingThreadCount());
+            }
+            else {
+               connectionBag.unreserve(poolEntry);
+               logger.debug("{} - keepalive: connection {} is alive", poolName, poolEntry.connection);
+            }
          }
       }
    }

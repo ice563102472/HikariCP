@@ -18,7 +18,7 @@ _Java 8 thru 11 maven artifact:_
     <dependency>
         <groupId>com.zaxxer</groupId>
         <artifactId>HikariCP</artifactId>
-        <version>3.4.5</version>
+        <version>4.0.1</version>
     </dependency>
 ```
 _Java 7 maven artifact (*maintenance mode*):_
@@ -69,7 +69,7 @@ The customer's environment imposed a high cost of new connection acquisition, an
 <br/>
 <br/>
 #### You're [probably] doing it wrong.
-<a href=""><img width="200" align="right" src="https://github.com/brettwooldridge/HikariCP/wiki/Postgres_Chart.png"></a>
+<a href="https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing"><img width="200" align="right" src="https://github.com/brettwooldridge/HikariCP/wiki/Postgres_Chart.png"></a>
 AKA *"What you probably didn't know about connection pool sizing"*.  Watch a video from the Oracle Real-world Performance group, and learn about why connection pools do not need to be sized as large as they often are.  In fact, oversized connection pools have a clear and demonstrable *negative* impact on performance; a 50x difference in the case of the Oracle demonstration.  [Read on to find out](https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing).
 <br/>
 #### WIX Engineering Analysis
@@ -166,6 +166,17 @@ variation of +15 seconds.  A connection will never be retired as idle *before* t
 of 0 means that idle connections are never removed from the pool.  The minimum allowed value is 10000ms
 (10 seconds).
 *Default: 600000 (10 minutes)*
+
+&#8986;``keepaliveTime``<br/>
+This property controls how frequently HikariCP will attempt to keep a connection alive, in order to prevent
+it from being timed out by the database or network infrastructure. This value must be less than the
+`maxLifetime` value. A "keepalive" will only occur on an idle connection. When the time arrives for a "keepalive"
+against a given connection, that connection will be removed from the pool, "pinged", and then returned to the
+pool. The 'ping' is one of either: invocation of the JDBC4 `isValid()` method, or execution of the 
+`connectionTestQuery`. Typically, the duration out-of-the-pool should be measured in single digit milliseconds
+or even sub-millisecond, and therefore should have little or no noticible performance impact. The minimum
+allowed value is 30000ms (30 seconds), but a value in the range of minutes is most desirable.
+*Default: 0 (disabled)*
 
 &#8986;``maxLifetime``<br/>
 This property controls the maximum lifetime of a connection in the pool.  An in-use connection will
